@@ -9,19 +9,19 @@ data {
      * number of fish observed in each state, in each 
      * observation year
      */
-    int<lower=0> observed_count[T, S];
+    int<lower=0> observed_count[T, 5];
 
     /*
      * number of recaptures observed in each year, in
      * each state
      */
-    int<lower=0> recaptured_count[T, S];
+    int<lower=0> recaptured_count[T, 5];
 
     /*
      * number of offsprings observed each year, in
      * each state
      */
-    int<lower=0> offspring_count[T, S]; 
+    int<lower=0> offspring_count[T, 5]; 
 
 }
 
@@ -50,17 +50,17 @@ transformed data {
     /*
      * (uniform) initial distribution
      */
-    simplex[S] init_dist = [0.25, 0.25, 0.25, 0.25, 0.0]; 
+    simplex[S] init_dist = [0.25, 0.25, 0.25, 0.25, 0.0]'; 
      
     /*
      * pure distributions
      */
     simplex[S] pure_dist[S] = {
-	    [1.0, 0.0, 0.0, 0.0, 0.0] ,
-	    [0.0, 1.0, 0.0, 0.0, 0.0] ,
-	    [0.0, 0.0, 1.0, 0.0, 0.0] ,
-	    [0.0, 0.0, 0.0, 1.0, 0.0] ,
-	    [0.0, 0.0, 0.0, 0.0, 1.0] 
+	    [1.0, 0.0, 0.0, 0.0, 0.0]' ,
+	    [0.0, 1.0, 0.0, 0.0, 0.0]' ,
+	    [0.0, 0.0, 1.0, 0.0, 0.0]' ,
+	    [0.0, 0.0, 0.0, 1.0, 0.0]' ,
+	    [0.0, 0.0, 0.0, 0.0, 1.0]' 
     };
 
     /*
@@ -78,9 +78,6 @@ transformed data {
     
     init_dist = rep_vector(1.0, S);
     init_dist = init_dist / S;
-
-    new_spawn_dist = rep_vector(0.0, S);
-    new_spawn_dist[STATE_JR] = 1.0;
 
     for (t in 1:T) {
         vector[S] tmp = to_vector(observed_count[t, :]) - to_vector(recaptured_count[t, :]);
@@ -104,7 +101,7 @@ parameters {
      * probability that a fish remains in its current
      * state for another time step
      */
-     vector<lower=0, upper=1[S - 1] prob_stasis;
+     vector<lower=0, upper=1>[S - 1] prob_stasis;
 
     /*
      * the initial size of each tracked population
@@ -174,7 +171,7 @@ transformed parameters {
 	 * Markov evolution for one year to the next
 	 */
 	for (p in 1:P) {
-	    pop_dist_in[t, p] =  markov_trans * (t > 1 : pop_dist_out[t - 1, p] : init_dist);
+	    pop_dist_in[t, p] =  markov_trans * (t > 1 ? pop_dist_out[t - 1, p] : init_dist);
 	}
 
         /*
@@ -188,7 +185,7 @@ transformed parameters {
 
 	    for (s in 1:S) {
 	        alpha[s] = observed_count[t, s];
-		old_pop -= recapture_count[t, s];
+		old_pop -= recaptured_count[t, s];
 	        new_pop += observed_count[t, s];
 	    }
 
@@ -201,7 +198,7 @@ transformed parameters {
 	{
 	    real beta;
 	    real old_pop = t > 1 ? pop_size[t - 1, POP_MARK] : 0;
-	    real new_pop = marked_spawn_pop[t];
+	    real new_pop = marked_spawn_size[t];
 	    vector[S] alpha = old_pop * pop_dist_in[t, POP_MARK];
 
 	    for (s in 1:S) {
@@ -217,9 +214,9 @@ transformed parameters {
 
         {
             real beta;
-	    real old_pop = t > 1 ? pop_size[t - 1, POP_UNK] : init_pop;
-	    real new_pop = unknow_spawn_pop[t];
-	    vector[S] alpha = old_pop * pop_dist_in[t, POP_UNK];
+	    real old_pop = t > 1 ? pop_size[t - 1, POP_UNKN] : init_pop;
+	    real new_pop = unknown_spawn_size[t];
+	    vector[S] alpha = old_pop * pop_dist_in[t, POP_UNKN];
 
 	    for (s in 1:S) {
                 real delta = observed_count[t, s] - recaptured_count[t, s] - offspring_count[t, s];
@@ -227,31 +224,32 @@ transformed parameters {
 		alpha[s] -= delta;
             }
 
-	    pop_size[t, POP_UNK] = old_pop + new_pop;
+	    pop_size[t, POP_UNKN] = old_pop + new_pop;
 	    alpha /= old_pop;
-	    beta = old_pop / pop_size[t, POP_UNK];
-	    pop_dist_out[t, POP_UNK] = beta * pop_dist_in[t, POP_UNK] + (1 - beta) * pure_dist[STATE_JR];
+	    beta = old_pop / pop_size[t, POP_UNKN];
+	    pop_dist_out[t, POP_UNKN] = beta * pop_dist_in[t, POP_UNKN] + (1 - beta) * pure_dist[STATE_JR];
         }
 
         /* 
 	 * probabilities of various kinds of observations 
 	 */
 	{
-            real total_pop = pop_size[t, POP_OBS] + pop_size[t, POP_MARK] + pop_size[t, POP_UNK];
+            real total_pop = pop_size[t, POP_OBS] + pop_size[t, POP_MARK] + pop_size[t, POP_UNKN];
 	    real prob_pop[P];
 
-	    for (p in 1:p) {
-	        prob[p] = pop_size[t, p] / total_pop;
+	    for (p in 1:P) {
+	        prob_pop[p] = pop_size[t, p] / total_pop;
 	    }
 
 	    for (s in 1:S) {
-	        {
-		    real denom = 0;
+		real denom = 0;
 
-		    for (p in 1:P) 
-                        denom += prob_pop[p] * pop_dist_in[t, p][s];
-                    recapture_prob[t, s] = prob_pop[POP_OBS] * pop_dist_in[t, POP_OBS][s] / denom;
-	            offspring_prob[t, s] = prob_pop[POP_MARK] * pop_dist_in[t, POP_MARK] / denom;
+		for (p in 1:P) {
+		    denom += prob_pop[p] * pop_dist_in[t, p][s];
+		}
+		
+                recapture_prob[t, s] = prob_pop[POP_OBS] * pop_dist_in[t, POP_OBS][s] / denom;
+	        offspring_prob[t, s] = prob_pop[POP_MARK] * pop_dist_in[t, POP_MARK][s] / denom;
             }
         }
     }
@@ -264,12 +262,12 @@ model {
     for (t in 1:T) {
 	{
             real pop = t > 1 ? pop_size[t - 1, POP_OBS] : 0;
-            real mu = prob_rep * pop	    
+            real mu = prob_rep * pop;	    
             real sigma = sqrt(prob_rep * (1 - prob_rep) * pop);
             marked_rep_pop[t] ~ normal(mu, sigma);
         }
         {
-            real pop = t > 1 ? pop_size[t - 1, POP_MARK] + pop_size[t - 1, POP_UNK] : init_pop;
+            real pop = t > 1 ? pop_size[t - 1, POP_MARK] + pop_size[t - 1, POP_UNKN] : init_pop;
 	    real mu = prob_rep * pop;
 	    real sigma = sqrt(prob_rep * (1 - prob_rep) * pop);
 	    unknown_rep_pop[t] ~ normal(mu, sigma);
@@ -291,7 +289,7 @@ model {
             }
 	    {
 	        int n = observed_count[t, s] - recaptured_count[t, s];
-                offsprings_count[t, s] ~ binomial(n, offspring_prob[t, s]);
+                offspring_count[t, s] ~ binomial(n, offspring_prob[t, s]);
 	    }
 	}
         
