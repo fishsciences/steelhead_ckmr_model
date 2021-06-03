@@ -234,14 +234,25 @@ transformed parameters {
         }
 
         /* 
-	 * probabilities of various kids of observations 
+	 * probabilities of various kinds of observations 
 	 */
-	for (s in 1:S) {
-	    real never_captured_pop = pop_size[t, POP_MARK] + pop_size[t, POP_UNK];
-	    real total_pop = never_captured_pop + pop_size[t, POP_OBS];
+	{
+            real total_pop = pop_size[t, POP_OBS] + pop_size[t, POP_MARK] + pop_size[t, POP_UNK];
+	    real prob_pop[P];
 
-            recapture_prob[t, s] = pop_size[t, POP_OBS] / total_pop;
-	    offspring_prob[t, s] = pop_size[t, POP_MARK] / never_captured_pop;
+	    for (p in 1:p) {
+	        prob[p] = pop_size[t, p] / total_pop;
+	    }
+
+	    for (s in 1:S) {
+	        {
+		    real denom = 0;
+
+		    for (p in 1:P) 
+                        denom += prob_pop[p] * pop_dist_in[t, p][s];
+                    recapture_prob[t, s] = prob_pop[POP_OBS] * pop_dist_in[t, POP_OBS][s] / denom;
+	            offspring_prob[t, s] = prob_pop[POP_MARK] * pop_dist_in[t, POP_MARK] / denom;
+            }
         }
     }
 }
