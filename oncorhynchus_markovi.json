@@ -1,0 +1,26 @@
+{
+    "species": {
+        "oncorhynchus markovi": {
+            "states": [
+                "juvenile",
+                "adult",
+                "dead"
+            ],
+            "transition": [
+                    [0.049, 0.001, 0.95],
+		    [0.0, 0.02, 0.98],
+		    [0.0, 0.0, 1.0]
+            ],
+	    "reproduction": {
+                "fitness": [0.0, 0.5, 0.0],
+                "fertility": {
+                    "mu": [0.0, 2.0e2, 0.0],
+                    "sigma": [0.0, 5.0e1, 0.0]
+                }
+	    },
+	    "population": [1e4, 1e3, 0.0],
+	    "capture": [1e-2, 1e-2, 0.0],
+	    "birth_state": "juvenile"
+        }
+    }
+}

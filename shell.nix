@@ -25,6 +25,7 @@ let
     ps.pandas
     ps.jupyter
     ps.matplotlib
+    ps.simpy
   ]);
 
 in mkShell {
