@@ -7,6 +7,7 @@ import simpy as sim
 from pathlib import Path
 from scipy.special import expit
 from collections import defaultdict
+from pandas import DataFrame, Series
 
 
 def parse_arguments():
@@ -21,6 +22,11 @@ def parse_arguments():
         type=int,
         default=10,
         metavar='INT')
+    p.add_argument('-o', '--output',
+        help='output experiment report to this file',
+        type=Path,
+        default=Path('./output.csv'),
+        metavar='FILE')
     args = p.parse_args()
     return args
 
@@ -126,24 +132,15 @@ def parse_species(spec):
 
 
 class Population(object):
-    def __init__(self, env, species, pop=False):
+    def __init__(self, species, pop=False):
         self._species = species
-        self._env = env
-        self._history = defaultdict(list)
         if pop:
             self._pop = species['population']
         else:
             self._pop = np.zeros(len(species['states']), dtype=int)
-        self._capture_event = env.event()
-        self._reproduce_event = env.event()
-        self._update_event = env.event()
-        self._transition_event = env.event()
-        self._process = env.process(self.live())
 
     def update_population(self, delta):
         self._pop += delta
-        self._update_event.succeed()
-        self._update_event = self._env.event()
 
     def transition(self):
         t = self._species['transition']
@@ -153,15 +150,12 @@ class Population(object):
         for d in dists:
             pop += d.rvs().reshape((3,))
         self._pop = pop
-        self._transition_event.succeed(value=pop)
-        self._transition_event = self._env.event()
+        return pop
 
     def capture(self):
         ns = self._pop
         ps = self._species['capture']
         cap = stats.binom(ns, ps).rvs()
-        self._capture_event.succeed(value=cap)
-        self._capture_event = self._env.event()
         return cap
 
     def reproduce(self):
@@ -174,31 +168,10 @@ class Population(object):
         rep = rep.sum()
         spawn = np.zeros(len(self._species['states']), dtype=int)
         spawn[self._species['birth_state']] = rep
-        self._reproduce_event.succeed(value=spawn)
-        self._reproduce_event = self._env.event()
-        return rep
+        return spawn
 
-    def history(self):
-        return self._history
-
-    def live(self):
-        while True:
-            self._history['time'].append(self._env.now)
-            self._history['population'].append(self._pop)
-            # get captured
-            print(f'time = {self._env.now}', file=sys.stderr)
-            cap = yield self._capture_event
-            self._history['capture'].append(cap)
-            print(f'time = {self._env.now}', file=sys.stderr)
-            # adjust population
-            yield self._update_event
-            # reproduce
-            rep = yield self._reproduce_event
-            self._history['reproduction'].append(rep)
-            # adjust population
-            yield self._update_event
-            # advance to next time step
-            yield self._transition_event
+    def population(self):
+        return self._pop.copy()
 
 
 def zero_factory(n):
@@ -206,66 +179,94 @@ def zero_factory(n):
 
 
 class Experiment(object):
+    _cohort_names = ('observed', 'marked', 'unknown')
+    _report_cols = (
+        'time',
+        'species',
+        'cohort',
+        'state',
+        'capture',
+        'population'
+    )
+
     def __init__(self, env, spec):
-        self._cohort_names = ('observed', 'marked', 'unknown')
         self._env = env
         self._spec = spec
-        self._cohorts = self._make_cohorts() 
+        self._make_cohorts() 
+        self._make_empty_report()
         self._process = env.process(self.perform())
+
+    def _make_empty_report(self):
+        self._report = DataFrame(columns=self._report_cols)
 
     def _make_cohorts(self):
         cohorts = dict()
         for (s, species) in self._spec['species'].items():
             cohorts[s] = dict()
             for c in self._cohort_names:
-                pop = Population(self._env, species, pop=(c == 'unknown'))
+                pop = Population(species, pop=(c == 'unknown'))
                 cohorts[s][c] = pop
-        return cohorts
+        self._cohorts = cohorts
+
+    def _log_data(self, species, cohort, capture):
+        states = self._spec['species'][species]['states']
+        n = len(states) 
+        now = self._env.now
+        entry = {
+            'time': [now] * n,
+            'species': [species] * n,
+            'cohort': [cohort] * n,
+            'state': states,
+            'capture': capture,
+            'population': self._cohorts[species][cohort].population()
+        }
+        entry = DataFrame(data=entry)
+        self._report = self._report.append(entry, ignore_index=True)
 
     def perform(self):
         while True:
-            print(f'Time step: t = {self._env.now}', file=sys.stderr)
-            for s in self._spec['species'].keys():
-                for c in self._cohort_names:
-                    print(f'{c} population of {s} was {self._cohorts[s][c]._pop}', file=sys.stderr)
+            now = self._env.now
+            print(f'time = {now}', file=sys.stderr)
             for s in self._spec['species'].keys():
                 n = len(self._spec['species'][s]['states'])
-                # capture fish
+
+                # capture fish and record data
                 cap = defaultdict(zero_factory(n))
                 for c in self._cohort_names:
                     tmp = self._cohorts[s][c].capture()
+                    self._log_data(s, c, tmp)
                     cap[c] -= tmp
                     cap['observed'] += tmp
+                
+                # update cohort populations to reflect the result
+                # of capture expedition
                 for c in self._cohort_names:
                     self._cohorts[s][c].update_population(cap[c])
+
+                # allow fish to reproduce
                 rep = defaultdict(zero_factory(n))
                 for c in self._cohort_names:
                     rep[c] = self._cohorts[s][c].reproduce()
                 self._cohorts[s]['observed'].update_population(0)
                 self._cohorts[s]['marked'].update_population(rep['observed'])
                 self._cohorts[s]['unknown'].update_population(rep['marked'] + rep['unknown'])
+            
+            # advance to next time step
             yield self._env.timeout(1.0)
             for s in self._spec['species'].keys():
                 for c in self._cohort_names:
                     self._cohorts[s][c].transition()
 
     def report(self):
-        rep = dict()
-        for (s, v) in self._spec['species'].items():
-            rep[s] = dict()
-            for c in self._cohort_names:
-                rep[s][c] = self._cohorts[s][c].history()
-        #rep = json.dumps(rep, indent=4, default=str)
-        print(rep)
+        return self._report.copy()
 
 def main():
     args = parse_arguments()
     spec = parse_spec(args)
-    print(spec, file=sys.stderr)
     env = sim.Environment()
     experiment = Experiment(env, spec)
     env.run(until=args.time)
-    experiment.report()
+    experiment.report().to_csv(args.output, index=False)
 
 
 if __name__ == '__main__':
