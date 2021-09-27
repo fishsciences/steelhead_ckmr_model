@@ -13,17 +13,11 @@ data {
 
 
 transformed data {
-    int<lower=0, upper=(N-1)> k[G];
-    int<lower=0, upper=(N-1)> n[G];
+    int<lower=0, upper=N> n[G+1];
+
+    n[1:G] = grp_size;
+    n[G+1] = 0;
     
-    {
-        int total = N;
-        for (i in 1:G) {
-            k[i] = grp_size[i] - 1;
-            n[i] = total - 1;
-            total -= grp_size[i];
-        }
-    }
 }
 
 
@@ -39,14 +33,10 @@ transformed parameters {
     real<lower=0, upper=1> osr = inv_logit(osr_logit);
     real<lower=F, upper=N0> F0 = N0 - M0;
     real<lower=0, upper=1> phi = G0 / (M0 * F0);
-    vector<lower=0, upper=1>[G] theta;
+    simplex[G+1] theta;
     
-    
-    {
-        vector[G] tmp = cumulative_sum(rep_vector(1.0, G)) - 1.0;
-        tmp = G0 - tmp;
-        theta = 1.0 ./ tmp;
-    }
+    theta[1:G] = rep_vector(1/G0, G);
+    theta[G+1] = 1 - sum(theta[1:G]);
 }
 
 
@@ -74,5 +64,5 @@ model {
         target += -log(M) -log(F) + beta_lpdf(phi | G + 1, M*F - G + 1);
     }
 
-    k ~ binomial(n, theta);
+    n ~ multinomial(theta);
 }
