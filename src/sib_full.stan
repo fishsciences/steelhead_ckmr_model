@@ -31,12 +31,11 @@ parameters {
 
 transformed parameters {
     real<lower=0, upper=1> osr = inv_logit(osr_logit);
-    real<lower=F, upper=N0> F0 = N0 - M0;
-    real<lower=0, upper=1> phi = G0 / (M0 * F0);
+    real<lower=F, upper=N0-M> F0 = N0 - M0;
     simplex[G+1] theta;
     
     theta[1:G] = rep_vector(1/G0, G);
-    theta[G+1] = 1 - sum(theta[1:G]);
+    theta[G+1] = 1 - G/G0;
 }
 
 
@@ -48,21 +47,16 @@ model {
 	real mu = N0 * osr;
 	real sigma = sqrt(mu * (1 - osr));
 
-        M0 ~ normal(N0 * osr, sqrt(N0 * osr *(1 - osr)));
+        M0 ~ normal(mu, sigma);
     }
     else {
         /* use relationship between binomial and beta distribution */
         target += -log(N0 + 1) + beta_lpdf(osr | M0 + 1, N0 - M0 + 1);
     }
 
-    if (method == 1) {
-	real mu = phi * M * F;
-	real sigma = sqrt(mu * (1 - phi));
-	G ~ normal(mu, sigma);
-    }
-    else {
-        target += -log(M) -log(F) + beta_lpdf(phi | G + 1, M*F - G + 1);
-    }
+    //target += lchoose(M0*F0 - G, G0 - G) - lchoose(M0*F0, G0);
+    G ~ binomial(M*F, G0 / (M0 * F0));
 
     n ~ multinomial(theta);
+    target += lgamma(G0 + 1) - lgamma(G0 - G + 1);
 }
