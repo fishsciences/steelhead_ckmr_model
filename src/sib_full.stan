@@ -54,8 +54,8 @@ model {
         target += -log(N0 + 1) + beta_lpdf(osr | M0 + 1, N0 - M0 + 1);
     }
 
-    //target += lchoose(M0*F0 - G, G0 - G) - lchoose(M0*F0, G0);
-    G ~ binomial(M*F, G0 / (M0 * F0));
+    target += lchoose(M0, M) + lchoose(F0, F) - lchoose(M0*F0, G);
+    //G ~ binomial(M*F, G0 / (M0 * F0));
 
     n ~ multinomial(theta);
     target += lgamma(G0 + 1) - lgamma(G0 - G + 1);
