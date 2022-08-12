@@ -1,42 +1,9 @@
-functions {
-    real wallenius(data array[] int fm, array[] real FM, real omg);
-
-    real wallenius(data array[] int fm, array[] real FM, real omg) {
-	if (fm[1] == 0 && fm[2] == 0) {
-	    return 0;
-	}
-	else if (fm[1] == 0 && fm[2] > 0) {
-	    real w = wallenius({0, fm[2] - 1}, {FM[1], FM[2] - 1}, omg);
-	    real p = log(FM[2]) - log(omg*FM[1] + FM[2]);
-	    return p + w;
-	}
-	else if (fm[2] == 0 && fm[1] > 0) {
-	    real w = wallenius({fm[1] - 1, 0}, {FM[1] - 1, FM[2]}, omg);
-	    real p = log(omg) + log(FM[1]) - log(omg*FM[1] + FM[2]);
-	    return p + w;
-	}
-	else {
-	    row_vector[2] w = [
-	        wallenius({fm[1] - 1, fm[2]}, {FM[1] - 1, FM[2]}, omg),
-		wallenius({fm[1], fm[2] - 1}, {FM[1], FM[2] - 1}, omg)
-	    ];
-	    row_vector[2] p = [
-	        log(omg) + log(FM[1]) - log(omg*FM[1] + FM[2]),
-	        log(FM[2]) - log(omg*FM[1] + FM[2])
-	    ];
-	    return log_sum_exp(p + w);
-	}
-    }
-}
-
 data {
     int<lower=0> M; // number of adult males collected
     int<lower=0> F; // number of adult females collected
     array[4] int<lower=0> by_parents;
-    real<lower=0> alpha;
-    real<lower=0> beta;
-    real mu;
-    real<lower=0> sigma;
+    real<lower=0, upper=1> mu;
+    real<lower=0> kappa;
 }
 
 transformed data {
@@ -51,6 +18,8 @@ parameters {
 }
 
 transformed parameters {
+  real<lower=0> alpha = mu * kappa;
+  real<lower=0> beta = kappa - alpha;
   real F0 = phi * A0;
   real M0 = A0 - F0;
   vector[4] theta;
@@ -65,12 +34,6 @@ transformed parameters {
 model {
   phi ~ beta(alpha,beta) T [F/A0, 1-M/A0];
   //omega ~ lognormal(mu, sigma);
-
-  /* 
-   * observed M, F follow a Wallenius non-central 
-   * hypergeometric distribution
-   */
-  //target += wallenius(fm, {F0, M0}, omega);
   
   by_parents ~ multinomial(softmax(theta));
 }
