@@ -4,6 +4,8 @@ data {
     array[4] int<lower=0> by_parents;
     real<lower=0, upper=1> mu;
     real<lower=0> kappa;
+    int<lower=M+F> A0_gt;
+    int<lower=F> F0_gt;
 }
 
 transformed data {
@@ -36,4 +38,11 @@ model {
   //omega ~ lognormal(mu, sigma);
   
   by_parents ~ multinomial(softmax(theta));
+}
+
+generated quantities {
+  real A0_err = (A0 - A0_gt) / A0_gt;
+  real F0_err = (F0 - F0_gt) / F0_gt;
+  real A0_ppq = (A0 < A0_gt);
+  real F0_ppq = (F0 < F0_gt);
 }
