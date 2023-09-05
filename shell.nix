@@ -137,6 +137,7 @@ let
     ps.cython
     ps.numpy
     ps.pandas
+    ps.openpyxl
     ps.jupyterlab
     ps.altair
     ps.matplotlib
@@ -148,6 +149,7 @@ in mkShell {
   buildInputs = [
     pythonEnv
     pystan
+    cmdstanpy
     arviz
   ];
 }
