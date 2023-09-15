@@ -87,7 +87,6 @@ data {
   array[N_adult] int<lower=1, upper=Y> adult_year;     // year of observation (data from one year is contiguous)
 
   /* CKMR observations */
-  array[Y, 2] int<lower=1, upper=N_known> N_ckmr_adults; // number of adult CKMR markers in each year (by sex)
   array[Y, 4] int<lower=1, upper=N_known> N_ckmr_juv;    // number of juvenile CKMR probes in each year, with outcome:
                                                          //     1 = no parent found
 							 //     2 = only mother
