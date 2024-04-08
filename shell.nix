@@ -1,19 +1,35 @@
 with import <nixpkgs> {};
 
 let
-  xarray-einstats = python38.pkgs.buildPythonPackage rec {
+  tqdm = python39.pkgs.buildPythonPackage rec {
+    pname = "tqdm";
+    version = "4.66.1";
+    format = "wheel";
+
+    src = python39.pkgs.fetchPypi {
+      inherit pname version format;
+      sha256 = "d302b3c5b53d47bce91fea46679d9c3c6508cf6332229aa1e7d8653723793386";
+      python = "py3";
+      dist = "py3";
+    };
+
+    doCheck = false;
+  };
+
+  xarray-einstats = python39.pkgs.buildPythonPackage rec {
     pname = "xarray-einstats";
-    version = "0.3.0";
+    version = "0.6.0";
     format = "pyproject";
 
-    src = python38.pkgs.fetchPypi {
-      inherit pname version;
-      sha256 = "13h9fbbz43y9diczv2b7xm4y3dv38zrnj5lz8qkr6iqqa8a7q8c1";
+    src = python39.pkgs.fetchPypi {
+      inherit version;
+      pname = "xarray_einstats";
+      sha256 = "ace90601505cfbe2d374762e674557ed14e1725b024823372f7ef9fd237effad";
     };
 
     doCheck = false;
 
-    propagatedBuildInputs = with python38.pkgs; [
+    propagatedBuildInputs = with python39.pkgs; [
       numpy
       cython  
       scipy
@@ -26,101 +42,101 @@ let
     ];
   };
 
-  arviz = python38.pkgs.buildPythonPackage rec {
-    pname = "arviz";
-    version = "0.12.1";
+  stanio = python39.pkgs.buildPythonPackage rec {
+    pname = "stanio";
+    version = "0.3.0";
+    format = "wheel";
 
-    src = python38.pkgs.fetchPypi {
-      inherit pname version;
-      sha256 = "06ghp01vxnplsl3a9zy5fyqc69r2n2k9cg5nda7g228rqnn0xn2p";
+    src = python39.pkgs.fetchPypi {
+      inherit pname version format;
+      sha256 = "2d34b5ebe9ad8fcd137437209bf4b53846d88dbe933441aca5d83fd32f9b0c7e";
+      python = "py3";
+      dist = "py3";
     };
 
     doCheck = false;
 
-    propagatedBuildInputs = with python38.pkgs; [
+    propagatedBuildInputs = with python39.pkgs; [
+      numpy
+    ];
+  };
+
+  arviz = python39.pkgs.buildPythonPackage rec {
+    pname = "arviz";
+    version = "0.16.1";
+
+    src = python39.pkgs.fetchPypi {
+      inherit pname version;
+      sha256 = "35bab9072f66f5a8204d2a71911d09ce05056c177f1a780de53efa2714c27575";
+    };
+
+    doCheck = false;
+
+    propagatedBuildInputs = with python39.pkgs; [
       numpy
       cython  
       pandas
       matplotlib
       xarray
       xarray-einstats
+      h5netcdf
     ];
   };
 
-  cmdstanpy = python38.pkgs.buildPythonPackage rec {
+  cmdstanpy = python39.pkgs.buildPythonPackage rec {
     pname = "cmdstanpy";
-    version = "0.9.76";
+    version = "1.2.0";
 
-    src = python38.pkgs.fetchPypi {
+    src = python39.pkgs.fetchPypi {
       inherit pname version;
-      sha256 = "17y8mkqgxfcbc7l2fcyx4nqimrx2jzymyp6p74rfywfq9d22zk2n";
+      sha256 = "bdf55ab76f9eea01763b8990a56ff55d03e69ec31d9613fdbbe4c452126ff1bb";
     };
 
     doCheck = false;
 
-    propagatedBuildInputs = with python38.pkgs; [
+    propagatedBuildInputs = with python39.pkgs; [
       numpy
       cython  
       ujson
       pandas
+      tqdm
+      stanio
     ];
   };
 
-  pysimdjson = python38.pkgs.buildPythonPackage rec {
+  pysimdjson = python39.pkgs.buildPythonPackage rec {
       pname = "pysimdjson";
-      version = "3.2.0";
+      version = "5.0.2";
 
-      src = python38.pkgs.fetchPypi {
+      src = python39.pkgs.fetchPypi {
           inherit pname version;
-          sha256 = "0xqlxjr2s369i7pl3gv7ryba2k5zabsin2dw3mv6f8vm844slfv4";
+          sha256 = "83010f07f9ca38e4557b61860acfeb0a897b416f06f73182ffaffa94bdb7394d";
       };
 
       doCheck = false;
 
-      propagatedBuildInputs = with python38.pkgs; [
+      propagatedBuildInputs = with python39.pkgs; [
         pybind11
       ];
   };
 
-  pystan = python38.pkgs.buildPythonPackage rec {
-    pname = "pystan";
-    version = "3.5.0";
-
-    src = python38.pkgs.fetchPypi {
-      inherit pname version;
-      sha256 = "0aa9a4szwi0cch5p4jhznv24m7wpl2a4jv90b6pw1dx5f7873187";
-    };
-
-    doCheck = false;
-
-    propagatedBuildInputs = with python38.pkgs; [
-      numpy
-      cython
-      pandas
-      clikit
-      aiohttp
-      pysimdjson
-      httpstan
-    ];
-  };
-
-  httpstan = python38.pkgs.buildPythonPackage rec {
+  httpstan = python39.pkgs.buildPythonPackage rec {
     pname = "httpstan";
-    version = "4.8.1";
+    version = "4.10.1";
     format = "wheel";
 
-    src = python38.pkgs.fetchPypi {
+    src = python39.pkgs.fetchPypi {
       inherit pname version format;
-      sha256 = "1lv5gdiafi4w07kgsbnmfcp1fn2imdax2h6q8ncb732zih52yqww";
-      dist = "cp38";
-      python = "cp38";
-      abi = "cp38";
+      sha256 = "821469883091523fef2c6d806bbfdb43efa07ec0df662ba58ccda9e773224640";
+      dist = "cp311";
+      python = "cp311";
+      abi = "cp311";
       platform = "manylinux_2_17_x86_64.manylinux2014_x86_64";
     };
 
     doCheck = false;
 
-    propagatedBuildInputs = with python38.pkgs; [
+    propagatedBuildInputs = with python39.pkgs; [
       numpy
       cython
       pandas
@@ -133,24 +149,23 @@ let
     ];
   };
 
-  pythonEnv = python38.withPackages (ps: [
+  pythonEnv = python39.withPackages (ps: [
     ps.cython
     ps.numpy
     ps.pandas
     ps.openpyxl
-    ps.jupyterlab
-    ps.altair
+    #ps.jupyterlab
+    #ps.altair
     ps.matplotlib
-    ps.tqdm
-    ps.ipywidgets
+    #ps.ipywidgets
   ]);
 
 in mkShell {
   buildInputs = [
     pythonEnv
-    pystan
     cmdstanpy
     arviz
+    tqdm
   ];
 }
 
