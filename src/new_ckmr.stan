@@ -9,7 +9,7 @@ data {
   int<lower=2> A;
 
   /* number of observed fish */
-  int<lower=T> F;
+  int<lower=2> F;
 
   /* number of observations */
   int<lower=F> Obs;
@@ -29,6 +29,9 @@ data {
   /* parentage data */
   array[P] int<lower=1, upper=F> parent;
   array[P] int<lower=1, upper=F> offspring;
+
+  /* applicability map */
+  array[M, 2, A] int<lower=0, upper=1> app;
 }
 
 transformed data {
@@ -46,9 +49,18 @@ transformed data {
   /* hatch year for each fish */
   array[F] int hatch_year;
 
+  /* oldest age the fish is known to have reached */
+  array[F] int<lower=1, upper=A> last_age;
+
+  /* 
+   * age of fish when it entered the study 
+   * (this is 1 for fish hatched during the study)
+   */
+  array[F] int<lower=1, upper=A> first_age;
+
   /* first and last observation year for each fish */
-  array[F] int<lower=1, upper=Y> first = rep_array(1, F);
-  array[F] int<lower=1, upper=Y> last  = rep_array(Y, F);
+  array[F] int<lower=1, upper=Y> first_year = rep_array(1, F);
+  array[F] int<lower=1, upper=Y> last_year  = rep_array(Y, F);
 
   /* effective juvenile sample in each year */
   array[Y] int Jsmp = rep_array(0, Y);
@@ -57,7 +69,7 @@ transformed data {
   array[2, Y] int<lower=0> Sk = rep_array(0, 2, Y); 
 
   /* fish detections */
-  array[F, Y, M] int<lower=0, upper=1> fish_det = rep_array(0, F, Y, M);
+  array[F, M, Y] int<lower=0, upper=1> fish_det = rep_array(0, F, M, Y);
 
 
   /* 
@@ -119,8 +131,27 @@ transformed data {
   for (i in 1:Obs) {
     int fish = obs_fish[i];
     int year = obs_year[i];
-    first[fish] = year < first[fish] ? year : first[fish];
-    last[fish]  = year > last[fish]  ? year : last[fish];
+    first_year[fish] = year < first_year[fish] ? year : first_year[fish];
+    last_year[fish]  = year > last_year[fish]  ? year : last_year[fish];
+  }
+  for (i in 1:P) {
+    int y = hatch_year[offspring[i]];
+    int f = parent[i];
+    first_year[f] = y < first_year[f] ? y : first_year[f];
+    last_year[f]  = y > last_year[f]  ? y : last_year[f];
+  }
+
+  /* 
+   * compute the age of each fish 
+   * at the last observation 
+   */
+  for (f in 1:F) {
+    last_age[f] = age[f, last_year[f]];
+  }
+
+  /* compute the age of each fish when it entered the study */
+  for (f in 1:F) {
+    first_age[f] = hatch_year[f] < 1 ? age[f, 1] : 1; 
   }
 
   /* compute detection matrix */
@@ -128,7 +159,7 @@ transformed data {
     int f = obs_fish[i];
     int y = obs_year[i];
     int m = obs_method[i];
-    fish_det[f, y, m] = 1;
+    fish_det[f, m, y] = 1;
   }
   
 }
@@ -137,13 +168,10 @@ transformed data {
 
 parameters {
   /* logarithmic force of mortality */
-  array[2, A] real<upper=0> fom; 
-
-  /* spawn probability */
-  array[2, A] real<lower=0, upper=1> sp;
+  matrix<upper=0>[A, 2] log_fom; 
 
   /* detection probability for each method */
-  vector<lower=0, upper=1>[M] det_prob;
+  vector<lower=0, upper=1>[M] met_prob;
 
   /* unknown spawners in each year */
   array[2, Y] real<lower=0> Su;
@@ -152,18 +180,11 @@ parameters {
 
 
 transformed parameters {
-  /* logarithmic survival to age probabilities */
-  array[2, A] real<upper=0> surv;
-
   /* Total spawners in each year */
   array[2, Y] real<lower=0> S;
 
-  /* CKMR detection probability */
-  array[F, Y] real<lower=0, upper=1> ckmr_prob;
-
-  /* compute survival to age probabilities */
-  surv[MALE, :] = cumulative_sum(fom[MALE, :]); 
-  surv[FEM,  :] = cumulative_sum(fom[FEM,  :]); 
+  /* detection probability  */
+  array[M, 2, A] real<lower=0, upper=1> det_prob;
 
   /* compute total number of spawners */
   for (s in 1:2) {
@@ -171,35 +192,81 @@ transformed parameters {
       S[s,y] = Su[s, y] + Sk[s, y];
     }
   }
+
+  /* compute detection probability  */
+  for (m in 1:M) {
+    for (s in 1:2) {
+      for (a in 1:A) {
+        det_prob[m, s, a] = met_prob[m] * app[m, s, a];
+      }
+    }
+  }
 }
 
 model {
+  array[2, Y] int J = {Jsmp, Jsmp};
 
   /* survival */
-  for (f in 1:F) {
-    /* survival probability to last observation for each fish */
-    target += surv[fish_sex[f], age[f, last[f]]];
+  {
+    vector[F] surv;
+    for (f in 1:F) {
+      surv[f] = sum(log_fom[1:last_age[f], fish_sex[f]]);
+    }
+    target += sum(surv);
   }
+
 
   /* detection */
-  for (f in 1:F) {
-    for (y in hatch_year[f]:last[f]) {
-      fish_det[f, y, :] ~ bernoulli(det_prob);
-    }
-  }
-
-  /* drop-off */
-  rep_array(1, F) ~ bernoulli(off_prob);
-
-  /* CKMR */
-  { 
+  {
     for (f in 1:F) {
-      array[Y] int J = Jsmp;
-      for (y in 1:Y) {
-        if (Bk[f, y] < 1) continue;
-	Bk[f, y] ~ binomial(J[y], ckmr_prob[y]);
-	J[y] -= Bk[f, y];
+      int fa = max(1, age[f, 1]);
+      int la = last_age[f];
+      int na = la - fa + 1;
+      int s = fish_sex[f];
+      int fy = max(1, hatch_year[f]);
+      int ly = last_year[f];
+      /* direct detections */
+      for (m in 1:M) {
+        vector[na] p = to_vector(det_prob[m, s, fa:la]) ;
+        fish_det[f, m, fy:ly] ~ bernoulli(p);
+      }
+      /* CKMR detections */
+      for (y in fy:ly) {
+        Bk[f, y] ~ binomial(J[s, y], 1/S[s, y]);
+        J[s, y] -= Bk[f, y];
+      }
     }
   }
 
+  /* end of life history */
+  for (f in 1:F) {
+    int ny = Y - last_year[f];
+    int s  = fish_sex[f];
+    int fy = last_year[f] + 1;
+    array[ny] int as = age[f, fy:Y]; 
+    vector[ny] pnd = rep_vector(0, ny);
+    vector[ny] chi; 
+    if (ny <= 0) continue;
+    /* non-detection by direct methods */
+    for (m in 1:M) {
+      pnd += log(1 - to_vector(det_prob[m, s, as]));
+    }
+    /* non-detection by CKMR */
+    for (i in 1:ny) {
+      int y = fy + i - 1;
+      pnd[i] += binomial_lpmf(0 | J[s, y], 1/S[s, y]);  
+    }
+    for (i in 0:(ny-1)) {
+      int y = Y - i;
+      int j = ny - i;
+      if (i == 0) {
+        chi[j] = pnd[j];
+      }
+      else {
+        real mu = exp(log_fom[age[f, y], s]);
+	chi[j] = log_mix(mu, 0, pnd[j] + chi[j+1]);
+      }
+    }
+    target += sum(chi);
+  }
 }

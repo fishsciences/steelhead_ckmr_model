@@ -158,6 +158,7 @@ let
     #ps.altair
     ps.matplotlib
     #ps.ipywidgets
+    ps.ipython
   ]);
 
 in mkShell {
