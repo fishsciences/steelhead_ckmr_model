@@ -3,7 +3,7 @@ data {
   int<lower=2> Y;
 
   /* number of obsevation methods */
-  int<lower=3> M;
+  int<lower=2> M;
 
   /* number of age groups */
   int<lower=2> A;
@@ -44,7 +44,7 @@ transformed data {
   array[F, Y] int age;
 
   /* offspring detected from each fish in each year */
-  array[F, Y] int<lower=0> Bk;
+  array[F, Y] int<lower=0> Bk = rep_array(0, F, Y);
 
   /* hatch year for each fish */
   array[F] int hatch_year;
@@ -137,8 +137,8 @@ transformed data {
   for (i in 1:P) {
     int y = hatch_year[offspring[i]];
     int f = parent[i];
-    first_year[f] = y < first_year[f] ? y : first_year[f];
-    last_year[f]  = y > last_year[f]  ? y : last_year[f];
+    first_year[f] = y < first_year[f] ? max(y, 1) : first_year[f];
+    last_year[f]  = y > last_year[f]  ? min(y, Y) : last_year[f];
   }
 
   /* 
@@ -208,6 +208,7 @@ model {
 
   /* survival */
   {
+    to_vector(log_fom) ~ cauchy(0, 5);
     vector[F] surv;
     for (f in 1:F) {
       surv[f] = sum(log_fom[1:last_age[f], fish_sex[f]]);
